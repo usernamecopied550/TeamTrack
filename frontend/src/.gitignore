@@ -1,0 +1,21 @@
+# Node / React
+frontend/node_modules/
+frontend/dist/
+
+# ASP.NET Core
+backend/bin/
+backend/obj/
+
+# User/system files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Backups
+backups/
+
+# Environment secrets
+.env
+*.env
+appsettings.Development.json
