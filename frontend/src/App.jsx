@@ -5,20 +5,40 @@ function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
 
-  function handleSubmit() {
-    if (isRegistering) {
-      setMessage("Account created successfully. You can now log in.");
-      setIsRegistering(false);
-    } else {
-      setMessage("");
-      setIsLoggedIn(true);
+  async function handleSubmit() {
+  if (isRegistering) {
+    setMessage("Account created successfully. You can now log in.");
+    setIsRegistering(false);
+  } else {
+    try {
+      const response = await fetch("http://localhost:5234/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+  email: email,
+  password: password,
+}),
+      });
+
+      if (response.ok) {
+        setIsLoggedIn(true);
+      } else {
+        const data = await response.json();
+        setMessage(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("Server error");
     }
   }
+}
 
-  if (isLoggedIn) {
-    return <Dashboard />;
-  }
+  if (isLoggedIn) return <Dashboard />;
 
   return (
     <main className="app">
@@ -26,10 +46,7 @@ function App() {
         <div>
           <p className="eyebrow">Team Track</p>
           <h1>Student project collaboration system</h1>
-          <p>
-            A React frontend connected to an ASP.NET Core API and MySQL
-            database.
-          </p>
+          <p>A React frontend connected to an ASP.NET Core API and MySQL database.</p>
         </div>
 
         <form className="login-form">
@@ -44,12 +61,22 @@ function App() {
 
           <label>
             Email
-            <input type="email" placeholder="student@teamtrack.edu" />
+            <input
+  type="email"
+  placeholder="student@teamtrack.edu"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+/>
           </label>
 
           <label>
             Password
-            <input type="password" placeholder="Password" />
+           <input
+  type="password"
+  placeholder="Password"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+/>
           </label>
 
           {isRegistering && (
@@ -86,77 +113,87 @@ function App() {
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
 
-  const [chatMessages, setChatMessages] = useState([
+  const [projects, setProjects] = useState([
     {
-      sender: "Rania",
-      text: "I created the project group and added the first tasks.",
-      own: false,
+      name: "Web Engineering Project",
+      deadline: "18 June 2026",
+      members: ["Rania", "Cindy", "Omar"],
+      status: "Active",
+      progress: 70,
     },
     {
-      sender: "Cindy",
-      text: "I started the MySQL database schema.",
-      own: false,
+      name: "Database Lab",
+      deadline: "24 June 2026",
+      members: ["Lina", "Adam", "Sofia"],
+      status: "Active",
+      progress: 45,
     },
     {
-      sender: "You",
-      text: "I will connect the React frontend to the ASP.NET Core API.",
-      own: true,
+      name: "Research Methods",
+      deadline: "10 June 2026",
+      members: ["Rania", "Lina"],
+      status: "Review",
+      progress: 88,
     },
   ]);
-
-  const [newMessage, setNewMessage] = useState("");
 
   const [tasks, setTasks] = useState([
-    {
-      title: "Create login validation",
-      assignedTo: "Rania",
-      status: "todo",
-      priority: "High",
-    },
-    {
-      title: "Prepare MySQL schema",
-      assignedTo: "Cindy",
-      status: "todo",
-      priority: "Medium",
-    },
-    {
-      title: "Build ASP.NET Core auth API",
-      assignedTo: "Omar",
-      status: "in-progress",
-      priority: "High",
-    },
-    {
-      title: "Draft component architecture",
-      assignedTo: "Rania",
-      status: "completed",
-      priority: "Low",
-    },
+    { title: "Create login validation", assignedTo: "Rania", status: "todo", priority: "High" },
+    { title: "Prepare MySQL schema", assignedTo: "Cindy", status: "todo", priority: "Medium" },
+    { title: "Build ASP.NET Core auth API", assignedTo: "Omar", status: "in-progress", priority: "High" },
+    { title: "Draft component architecture", assignedTo: "Rania", status: "completed", priority: "Low" },
   ]);
 
+  const [chatMessages, setChatMessages] = useState([
+    { sender: "Rania", text: "I created the project group and added the first tasks.", own: false },
+    { sender: "Cindy", text: "I started the MySQL database schema.", own: false },
+    { sender: "You", text: "I will connect the React frontend to the ASP.NET Core API.", own: true },
+  ]);
+
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDeadline, setNewProjectDeadline] = useState("");
+  const [selectedProjectIndex, setSelectedProjectIndex] = useState(0);
+  const [newMemberName, setNewMemberName] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPerson, setNewTaskPerson] = useState("Rania");
+  const [newMessage, setNewMessage] = useState("");
 
-  function sendMessage() {
-    if (newMessage.trim() === "") {
-      return;
-    }
+  const allMembers = [...new Set(projects.flatMap((project) => project.members))];
 
-    setChatMessages([
-      ...chatMessages,
+  function addProject() {
+    if (newProjectName.trim() === "") return;
+
+    setProjects([
+      ...projects,
       {
-        sender: "You",
-        text: newMessage,
-        own: true,
+        name: newProjectName,
+        deadline: newProjectDeadline || "No deadline yet",
+        members: ["Rania"],
+        status: "Active",
+        progress: 0,
       },
     ]);
 
-    setNewMessage("");
+    setNewProjectName("");
+    setNewProjectDeadline("");
+  }
+
+  function addMember() {
+    if (newMemberName.trim() === "") return;
+
+    setProjects(
+      projects.map((project, index) =>
+        index === Number(selectedProjectIndex)
+          ? { ...project, members: [...project.members, newMemberName] }
+          : project
+      )
+    );
+
+    setNewMemberName("");
   }
 
   function addTask() {
-    if (newTaskTitle.trim() === "") {
-      return;
-    }
+    if (newTaskTitle.trim() === "") return;
 
     setTasks([
       ...tasks,
@@ -171,11 +208,25 @@ function Dashboard() {
     setNewTaskTitle("");
   }
 
+  function sendMessage() {
+    if (newMessage.trim() === "") return;
+
+    setChatMessages([
+      ...chatMessages,
+      {
+        sender: "You",
+        text: newMessage,
+        own: true,
+      },
+    ]);
+
+    setNewMessage("");
+  }
+
   return (
     <main className="dashboard">
       <aside className="sidebar">
         <h2>Team Track</h2>
-
         <nav>
           <button onClick={() => setActivePage("dashboard")}>Dashboard</button>
           <button onClick={() => setActivePage("projects")}>Projects</button>
@@ -191,38 +242,48 @@ function Dashboard() {
             <p className="eyebrow">Welcome back</p>
             <h1>Project dashboard</h1>
           </div>
-
-          <button>New project</button>
+          <button onClick={() => setActivePage("projects")}>New project</button>
         </header>
 
         <div className="stats-grid">
           <article>
             <span>Active projects</span>
-            <strong>3</strong>
+            <strong>{projects.length}</strong>
           </article>
-
           <article>
             <span>Open tasks</span>
             <strong>{tasks.length}</strong>
           </article>
-
           <article>
             <span>Messages</span>
             <strong>{chatMessages.length}</strong>
           </article>
-
           <article>
             <span>Progress</span>
             <strong>64%</strong>
           </article>
         </div>
 
-        {activePage === "dashboard" && <DashboardHome />}
-        {activePage === "projects" && <ProjectsPage />}
-
+        {activePage === "dashboard" && <DashboardHome projects={projects} />}
+        {activePage === "projects" && (
+          <ProjectsPage
+            projects={projects}
+            newProjectName={newProjectName}
+            setNewProjectName={setNewProjectName}
+            newProjectDeadline={newProjectDeadline}
+            setNewProjectDeadline={setNewProjectDeadline}
+            addProject={addProject}
+            selectedProjectIndex={selectedProjectIndex}
+            setSelectedProjectIndex={setSelectedProjectIndex}
+            newMemberName={newMemberName}
+            setNewMemberName={setNewMemberName}
+            addMember={addMember}
+          />
+        )}
         {activePage === "tasks" && (
           <TasksPage
             tasks={tasks}
+            allMembers={allMembers}
             newTaskTitle={newTaskTitle}
             setNewTaskTitle={setNewTaskTitle}
             newTaskPerson={newTaskPerson}
@@ -230,7 +291,6 @@ function Dashboard() {
             addTask={addTask}
           />
         )}
-
         {activePage === "messages" && (
           <MessagesPage
             chatMessages={chatMessages}
@@ -239,40 +299,44 @@ function Dashboard() {
             sendMessage={sendMessage}
           />
         )}
-
-        {activePage === "progress" && <ProgressPage />}
+        {activePage === "progress" && <ProgressPage projects={projects} />}
       </section>
     </main>
   );
 }
 
-function DashboardHome() {
+function DashboardHome({ projects }) {
   return (
     <section className="panel">
       <h2>Current projects</h2>
-
       <div className="project-list">
-        <article>
-          <h3>Web Engineering Project</h3>
-          <p>Team members: Rania, Cindy, Omar</p>
-          <div className="progress-bar">
-            <div style={{ width: "70%" }}></div>
-          </div>
-        </article>
-
-        <article>
-          <h3>Database Lab</h3>
-          <p>Team members: Lina, Adam, Sofia</p>
-          <div className="progress-bar">
-            <div style={{ width: "45%" }}></div>
-          </div>
-        </article>
+        {projects.map((project) => (
+          <article key={project.name}>
+            <h3>{project.name}</h3>
+            <p>Team members: {project.members.join(", ")}</p>
+            <div className="progress-bar">
+              <div style={{ width: `${project.progress}%` }}></div>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
 }
 
-function ProjectsPage() {
+function ProjectsPage({
+  projects,
+  newProjectName,
+  setNewProjectName,
+  newProjectDeadline,
+  setNewProjectDeadline,
+  addProject,
+  selectedProjectIndex,
+  setSelectedProjectIndex,
+  newMemberName,
+  setNewMemberName,
+  addMember,
+}) {
   return (
     <section className="panel">
       <div className="panel-header">
@@ -280,31 +344,63 @@ function ProjectsPage() {
           <h2>Projects</h2>
           <p>Create groups, invite members, and manage academic projects.</p>
         </div>
+      </div>
 
-        <button>+ Create project</button>
+      <div className="project-actions">
+        <div className="task-form">
+          <input
+            type="text"
+            placeholder="Project name"
+            value={newProjectName}
+            onChange={(event) => setNewProjectName(event.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Deadline"
+            value={newProjectDeadline}
+            onChange={(event) => setNewProjectDeadline(event.target.value)}
+          />
+          <button type="button" onClick={addProject}>
+            Create project
+          </button>
+        </div>
+
+        <div className="task-form">
+          <select
+            value={selectedProjectIndex}
+            onChange={(event) => setSelectedProjectIndex(event.target.value)}
+          >
+            {projects.map((project, index) => (
+              <option value={index} key={project.name}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="text"
+            placeholder="Member name"
+            value={newMemberName}
+            onChange={(event) => setNewMemberName(event.target.value)}
+          />
+
+          <button type="button" onClick={addMember}>
+            Add member
+          </button>
+        </div>
       </div>
 
       <div className="project-list">
-        <article>
-          <h3>Web Engineering Project</h3>
-          <p>Deadline: 18 June 2026</p>
-          <p>Members: Rania, Cindy, Omar</p>
-          <span className="status active">Active</span>
-        </article>
-
-        <article>
-          <h3>Database Lab</h3>
-          <p>Deadline: 24 June 2026</p>
-          <p>Members: Lina, Adam, Sofia</p>
-          <span className="status active">Active</span>
-        </article>
-
-        <article>
-          <h3>Research Methods</h3>
-          <p>Deadline: 10 June 2026</p>
-          <p>Members: Rania, Lina</p>
-          <span className="status review">Review</span>
-        </article>
+        {projects.map((project) => (
+          <article key={project.name}>
+            <h3>{project.name}</h3>
+            <p>Deadline: {project.deadline}</p>
+            <p>Members: {project.members.join(", ")}</p>
+            <span className={`status ${project.status === "Review" ? "review" : "active"}`}>
+              {project.status}
+            </span>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -312,6 +408,7 @@ function ProjectsPage() {
 
 function TasksPage({
   tasks,
+  allMembers,
   newTaskTitle,
   setNewTaskTitle,
   newTaskPerson,
@@ -339,10 +436,9 @@ function TasksPage({
           value={newTaskPerson}
           onChange={(event) => setNewTaskPerson(event.target.value)}
         >
-          <option>Rania</option>
-          <option>Cindy</option>
-          <option>Omar</option>
-          <option>Lina</option>
+          {allMembers.map((member) => (
+            <option key={member}>{member}</option>
+          ))}
         </select>
 
         <button type="button" onClick={addTask}>
@@ -351,20 +447,9 @@ function TasksPage({
       </div>
 
       <div className="task-board">
-        <TaskColumn
-          title="To do"
-          tasks={tasks.filter((task) => task.status === "todo")}
-        />
-
-        <TaskColumn
-          title="In progress"
-          tasks={tasks.filter((task) => task.status === "in-progress")}
-        />
-
-        <TaskColumn
-          title="Completed"
-          tasks={tasks.filter((task) => task.status === "completed")}
-        />
+        <TaskColumn title="To do" tasks={tasks.filter((task) => task.status === "todo")} />
+        <TaskColumn title="In progress" tasks={tasks.filter((task) => task.status === "in-progress")} />
+        <TaskColumn title="Completed" tasks={tasks.filter((task) => task.status === "completed")} />
       </div>
     </section>
   );
@@ -374,7 +459,6 @@ function TaskColumn({ title, tasks }) {
   return (
     <div className="task-column">
       <h3>{title}</h3>
-
       {tasks.map((task, index) => (
         <article className="task-card" key={index}>
           <h4>{task.title}</h4>
@@ -388,12 +472,7 @@ function TaskColumn({ title, tasks }) {
   );
 }
 
-function MessagesPage({
-  chatMessages,
-  newMessage,
-  setNewMessage,
-  sendMessage,
-}) {
+function MessagesPage({ chatMessages, newMessage, setNewMessage, sendMessage }) {
   return (
     <section className="panel">
       <div className="message-list">
@@ -415,7 +494,6 @@ function MessagesPage({
           value={newMessage}
           onChange={(event) => setNewMessage(event.target.value)}
         />
-
         <button type="button" onClick={sendMessage}>
           Send
         </button>
@@ -424,11 +502,23 @@ function MessagesPage({
   );
 }
 
-function ProgressPage() {
+function ProgressPage({ projects }) {
   return (
     <section className="panel">
       <h2>Progress</h2>
       <p>Track project completion based on finished tasks.</p>
+
+      <div className="project-list">
+        {projects.map((project) => (
+          <article key={project.name}>
+            <h3>{project.name}</h3>
+            <p>{project.progress}% completed</p>
+            <div className="progress-bar">
+              <div style={{ width: `${project.progress}%` }}></div>
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

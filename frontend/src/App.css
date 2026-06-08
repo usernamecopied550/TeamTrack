@@ -441,3 +441,77 @@ input:focus {
   max-height: 420px;
   overflow-y: auto;
 }
+
+.project-actions {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+}
+
+.task-form select {
+  height: 44px;
+  border: 1px solid #b8d6ff;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #f8fbff;
+  color: #172033;
+}
+
+.task-form button {
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: linear-gradient(90deg, #2563eb, #ec4899);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .task-form {
+    grid-template-columns: 1fr;
+  }
+}
+.project-actions {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.task-form select {
+  height: 44px;
+  border: 1px solid #b8d6ff;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #f8fbff;
+  color: #172033;
+}
+
+.task-form button {
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: linear-gradient(90deg, #2563eb, #ec4899);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .task-form {
+    grid-template-columns: 1fr;
+  }
+}
