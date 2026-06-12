@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MySql.Data.MySqlClient;
 
 namespace backend.Controllers
 {
@@ -9,11 +10,24 @@ namespace backend.Controllers
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest request)
         {
-            Console.WriteLine($"Email: {request.Email}, Password: {request.Password}");
+            string connectionString = "server=localhost;user=root;password=rania12..?Ij;database=teamtrack;";
 
-            if (request.Email == "test@test.com" && request.Password == "1234")
+            using (var connection = new MySqlConnection(connectionString)) //MySQL usage
             {
-                return Ok(new { message = "Login successful" });
+                connection.Open();
+
+                string query = "SELECT * FROM Users WHERE Email=@Email AND Password=@Password";
+                var cmd = new MySqlCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@Email", request.Email);
+                cmd.Parameters.AddWithValue("@Password", request.Password);
+
+                var reader = cmd.ExecuteReader();
+
+                if (reader.HasRows)
+                {
+                    return Ok(new { message = "Login successful" });
+                }
             }
 
             return Unauthorized(new { message = "Invalid credentials" });
@@ -22,7 +36,20 @@ namespace backend.Controllers
         [HttpPost("register")]
         public IActionResult Register([FromBody] LoginRequest request)
         {
-            Console.WriteLine($"REGISTER -> Email: {request.Email}, Password: {request.Password}");
+            string connectionString = "server=localhost;user=root;password=rania12..?Ij;database=teamtrack;";
+
+            using (var connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+
+                string query = "INSERT INTO Users (Email, Password) VALUES (@Email, @Password)";
+                var cmd = new MySqlCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@Email", request.Email);
+                cmd.Parameters.AddWithValue("@Password", request.Password);
+
+                cmd.ExecuteNonQuery();
+            }
 
             return Ok(new { message = "User registered successfully" });
         }

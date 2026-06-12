@@ -9,10 +9,27 @@ function App() {
 const [password, setPassword] = useState("");
 
   async function handleSubmit() {
-  if (isRegistering) {
-    setMessage("Account created successfully. You can now log in.");
+    if (isRegistering) {
+  try {
+    const response = await fetch("http://localhost:5234/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        password: password,
+      }),
+    });
+
+    const data = await response.json();
+    setMessage(data.message);
     setIsRegistering(false);
-  } else {
+  } catch (error) {
+    setMessage("Server error");
+  }
+}
+  else {
     try {
       const response = await fetch("http://localhost:5234/api/auth/login", {
         method: "POST",
@@ -159,10 +176,25 @@ function Dashboard() {
   const [newMessage, setNewMessage] = useState("");
 
   const allMembers = [...new Set(projects.flatMap((project) => project.members))];
+async function addProject() {
+  if (newProjectName.trim() === "") return;
 
-  function addProject() {
-    if (newProjectName.trim() === "") return;
+  try {
+    const response = await fetch("http://localhost:5234/api/project/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: newProjectName,
+        description: newProjectDeadline,
+      }),
+    });
 
+    const data = await response.json();
+    console.log(data.message);
+
+    // ALSO update UI (keep your old behavior)
     setProjects([
       ...projects,
       {
@@ -173,6 +205,13 @@ function Dashboard() {
         progress: 0,
       },
     ]);
+
+    setNewProjectName("");
+    setNewProjectDeadline("");
+  } catch (error) {
+    console.error("Error creating project");
+  }
+}
 
     setNewProjectName("");
     setNewProjectDeadline("");
