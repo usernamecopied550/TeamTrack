@@ -86,7 +86,7 @@ function Dashboard({ user, onLogout }) {
       const res = await fetch(`${API}/project/list/${user.userId}`);
       const data = await res.json();
       setProjects(data);
-      if (data.length > 0) setSelectedProject(data[0]);
+      if (data.length > 0) setSelectedProject(prev => prev ? data.find(p => p.id === prev.id) || data[0] : data[0]);
     } catch { console.error("Could not load projects"); }
   }
 
@@ -118,7 +118,8 @@ function Dashboard({ user, onLogout }) {
     { id: "tasks", label: "Tasks", icon: "✅" },
     { id: "members", label: "Members", icon: "👥" },
     { id: "chat", label: "Chat", icon: "💬" },
-    ...(user.isAdmin ? [{ id: "admin", label: "Admin Panel", icon: "⚙️" }] : []),
+    { id: "profile", label: "My Profile", icon: "👤" },
+    ...(user.isAdmin ? [{ id: "admin", label: "Super Admin Panel", icon: "⚙️" }] : []),
   ];
 
   return (
@@ -136,29 +137,13 @@ function Dashboard({ user, onLogout }) {
           ))}
         </nav>
         <div className="sidebar-user">
-  <div className="user-avatar">{userInitial}</div>
-  <div style={{ flex: 1 }}>
-    <p className="user-name">{displayName}</p>
-    <p className="user-email">{user.email || ""}</p>
-  </div>
-  <button
-    onClick={onLogout}
-    style={{
-      background: "rgba(255,255,255,0.2)",
-      border: "none",
-      color: "white",
-      fontSize: "18px",
-      width: "32px",
-      height: "32px",
-      borderRadius: "8px",
-      cursor: "pointer",
-      flexShrink: 0
-    }}
-    title="Log out"
-  >
-    ⏻
-  </button>
-</div>
+          <div className="user-avatar">{userInitial}</div>
+          <div style={{ flex: 1 }}>
+            <p className="user-name">{displayName}</p>
+            <p className="user-email">{user.email || ""}</p>
+          </div>
+          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", fontSize: "18px", width: "32px", height: "32px", borderRadius: "8px", cursor: "pointer", flexShrink: 0 }} title="Log out">⏻</button>
+        </div>
       </aside>
 
       <div className="dashboard-content">
@@ -182,9 +167,10 @@ function Dashboard({ user, onLogout }) {
 
         {activePage === "dashboard" && <DashboardHome projects={projects} user={user} onSelectProject={selectProject} setActivePage={setActivePage} />}
         {activePage === "projects" && <ProjectsPage projects={projects} user={user} onProjectCreated={loadProjects} onSelectProject={selectProject} />}
-        {activePage === "tasks" && <TasksPage projects={projects} user={user} selectedProject={selectedProject} setSelectedProject={setSelectedProject} />}
+        {activePage === "tasks" && <TasksPage projects={projects} user={user} selectedProject={selectedProject} setSelectedProject={setSelectedProject} onProgressUpdate={loadProjects} />}
         {activePage === "members" && <MembersPage projects={projects} user={user} />}
         {activePage === "chat" && <ChatPage projects={projects} user={user} selectedProject={selectedProject} setSelectedProject={setSelectedProject} />}
+        {activePage === "profile" && <ProfilePage user={user} projects={projects} />}
         {activePage === "admin" && user.isAdmin && <AdminPage user={user} />}
       </div>
     </main>
@@ -217,7 +203,7 @@ function DashboardHome({ projects, user, onSelectProject, setActivePage }) {
             <div key={project.id} className="project-card" onClick={() => onSelectProject(project)} style={{ cursor: "pointer" }}>
               <div className="project-card-header">
                 <h3>{project.name}</h3>
-                {project.isAdmin ? <span className="admin-badge">Admin</span> : <span className="status-badge member">Member</span>}
+                {project.isAdmin ? <span className="admin-badge">Project Admin</span> : <span className="status-badge member">Member</span>}
               </div>
               <p className="project-deadline">📅 {project.deadline || "No deadline"}</p>
               <div className="progress-bar"><div className="progress-fill" style={{ width: `${project.progress}%` }}></div></div>
@@ -254,16 +240,22 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
   return (
     <div className="page">
       <h1 className="page-title">Projects</h1>
-      <div className="form-card">
-        <h2>Create New Project</h2>
-        <div className="form-row">
-          <input type="text" placeholder="Project name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <input type="text" placeholder="Deadline (e.g. 30 June 2026)" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} />
-          <input type="text" placeholder="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-          <button onClick={createProject}>Create</button>
+      {!user.isAdmin ? (
+        <div className="form-card">
+          <h2>Create New Project</h2>
+          <div className="form-row">
+            <input type="text" placeholder="Project name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <input type="text" placeholder="Deadline (e.g. 30 June 2026)" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} />
+            <input type="text" placeholder="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+            <button onClick={createProject}>Create</button>
+          </div>
+          {msg && <p className="success-message">{msg}</p>}
         </div>
-        {msg && <p className="success-message">{msg}</p>}
-      </div>
+      ) : (
+        <div className="form-card" style={{ background: "#fdf0f8", border: "1px solid #f3d4ff" }}>
+          <p style={{ color: "#b08fd4", fontSize: "14px" }}>👁️ You are viewing as Super Admin — you can monitor all projects but cannot create new ones.</p>
+        </div>
+      )}
       {projects.length === 0 ? (
         <div className="empty-state"><p>No projects yet — create one above!</p></div>
       ) : (
@@ -272,7 +264,7 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
             <div key={project.id} className="project-card" onClick={() => onSelectProject(project)} style={{ cursor: "pointer" }}>
               <div className="project-card-header">
                 <h3>{project.name}</h3>
-                {project.isAdmin ? <span className="admin-badge">Admin</span> : <span className="status-badge member">Member</span>}
+                {project.isAdmin ? <span className="admin-badge">Project Admin</span> : <span className="status-badge member">Member</span>}
               </div>
               {project.description && <p className="project-deadline">{project.description}</p>}
               <p className="project-deadline">📅 {project.deadline || "No deadline"}</p>
@@ -286,12 +278,13 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
   );
 }
 
-function TasksPage({ projects, user, selectedProject, setSelectedProject }) {
+function TasksPage({ projects, user, selectedProject, setSelectedProject, onProgressUpdate }) {
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPerson, setNewTaskPerson] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("Medium");
+  const [editingTask, setEditingTask] = useState(null);
   const [msg, setMsg] = useState("");
 
   useEffect(() => { if (selectedProject) { loadTasks(); loadMembers(); } }, [selectedProject]);
@@ -329,6 +322,25 @@ function TasksPage({ projects, user, selectedProject, setSelectedProject }) {
       body: JSON.stringify({ taskId, projectId: selectedProject.id, status }),
     });
     loadTasks();
+    if (onProgressUpdate) onProgressUpdate();
+  }
+
+  async function deleteTask(taskId) {
+    if (!window.confirm("Delete this task?")) return;
+    await fetch(`${API}/project/deletetask/${taskId}/${selectedProject.id}/${user.userId}`, { method: "DELETE" });
+    loadTasks();
+    if (onProgressUpdate) onProgressUpdate();
+  }
+
+  async function saveEditTask() {
+    if (!editingTask.title.trim()) return;
+    await fetch(`${API}/project/updatetaskdetails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: editingTask.id, projectId: selectedProject.id, requesterId: user.userId, title: editingTask.title, assignedToId: editingTask.assignedToId, priority: editingTask.priority }),
+    });
+    setEditingTask(null);
+    loadTasks();
   }
 
   const todo = tasks.filter(t => t.status === "todo");
@@ -351,9 +363,9 @@ function TasksPage({ projects, user, selectedProject, setSelectedProject }) {
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
-      {selectedProject?.isAdmin && (
+      {selectedProject?.isAdmin && !user.isAdmin && (
         <div className="form-card">
-          <h2>Assign New Task <span className="admin-only-label">(Admin only)</span></h2>
+          <h2>Assign New Task <span className="admin-only-label">(Project Admin only)</span></h2>
           <div className="form-row">
             <input type="text" placeholder="Task title" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} />
             <select value={newTaskPerson} onChange={(e) => setNewTaskPerson(e.target.value)}>
@@ -369,6 +381,28 @@ function TasksPage({ projects, user, selectedProject, setSelectedProject }) {
           {msg && <p className="success-message">{msg}</p>}
         </div>
       )}
+      {editingTask && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Edit Task</h2>
+            <div className="form-row" style={{ flexDirection: "column" }}>
+              <input type="text" value={editingTask.title} onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })} placeholder="Task title" />
+              <select value={editingTask.assignedToId} onChange={(e) => setEditingTask({ ...editingTask, assignedToId: parseInt(e.target.value) })}>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
+              </select>
+              <select value={editingTask.priority} onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <div className="modal-btns">
+              <button onClick={saveEditTask}>Save</button>
+              <button className="cancel-btn" onClick={() => setEditingTask(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="kanban">
         {[["todo", "To Do", todo], ["in-progress", "In Progress", inProgress], ["completed", "Completed", completed]].map(([status, label, list]) => (
           <div key={status} className="kanban-col">
@@ -380,11 +414,22 @@ function TasksPage({ projects, user, selectedProject, setSelectedProject }) {
                   <span className="chip">{t.assignedTo}</span>
                   <span className={`priority-badge ${t.priority.toLowerCase()}`}>{t.priority}</span>
                 </div>
-                <select className="status-select" value={t.status} onChange={(e) => updateStatus(t.id, e.target.value)}>
+                <select
+                  className="status-select"
+                  value={t.status}
+                  onChange={(e) => updateStatus(t.id, e.target.value)}
+                  disabled={user.isAdmin || (!selectedProject?.isAdmin && t.assignedTo !== (user.name || user.email))}
+                >
                   <option value="todo">To Do</option>
                   <option value="in-progress">In Progress</option>
                   <option value="completed">Completed</option>
                 </select>
+                {selectedProject?.isAdmin && !user.isAdmin && (
+                  <div className="task-admin-btns">
+                    <button className="edit-btn" onClick={() => setEditingTask({ id: t.id, title: t.title, assignedToId: members.find(m => (m.name || m.email) === t.assignedTo)?.id || members[0]?.id, priority: t.priority })}>✏️ Edit</button>
+                    <button className="delete-btn" onClick={() => deleteTask(t.id)}>🗑️ Delete</button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -421,6 +466,14 @@ function MembersPage({ projects, user }) {
     loadMembers();
   }
 
+  async function removeMember(memberId) {
+    if (!window.confirm("Remove this member from the project?")) return;
+    const res = await fetch(`${API}/project/${selectedProject.id}/removemember/${memberId}/${user.userId}`, { method: "DELETE" });
+    const data = await res.json();
+    setMsg(data.message);
+    loadMembers();
+  }
+
   if (!selectedProject) return (
     <div className="page">
       <h1 className="page-title">Members</h1>
@@ -437,14 +490,19 @@ function MembersPage({ projects, user }) {
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
-      {selectedProject?.isAdmin && (
+      {selectedProject?.isAdmin && !user.isAdmin && (
         <div className="form-card">
-          <h2>Add Member <span className="admin-only-label">(Admin only)</span></h2>
+          <h2>Add Member <span className="admin-only-label">(Project Admin only)</span></h2>
           <div className="form-row">
             <input type="email" placeholder="Member's email address" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
             <button onClick={addMember}>Add Member</button>
           </div>
           {msg && <p className="success-message">{msg}</p>}
+        </div>
+      )}
+      {user.isAdmin && (
+        <div className="form-card" style={{ background: "#fdf0f8", border: "1px solid #f3d4ff" }}>
+          <p style={{ color: "#b08fd4", fontSize: "14px" }}>👁️ Super Admin view — you can see all members but cannot add or remove them.</p>
         </div>
       )}
       <div className="member-grid">
@@ -453,7 +511,12 @@ function MembersPage({ projects, user }) {
             <div className="member-avatar">{((m.name || m.email) || "U")[0].toUpperCase()}</div>
             <p className="member-name">{m.name || "No name"}</p>
             <p className="member-projects">{m.email}</p>
-            {selectedProject?.adminId === m.id && <span className="admin-badge">Admin</span>}
+            {selectedProject?.adminId === m.id
+              ? <span className="admin-badge">Project Admin</span>
+              : selectedProject?.isAdmin && !user.isAdmin
+                ? <button className="delete-btn" style={{ marginTop: "8px" }} onClick={() => removeMember(m.id)}>Remove</button>
+                : null
+            }
           </div>
         ))}
       </div>
@@ -510,12 +573,18 @@ function ChatPage({ projects, user, selectedProject, setSelectedProject }) {
           </div>
         ))}
       </div>
-      <div className="chat-input-row">
-        <input type="text" placeholder="Type a message..." value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()} />
-        <button onClick={sendMessage}>Send</button>
-      </div>
+      {!user.isAdmin ? (
+        <div className="chat-input-row">
+          <input type="text" placeholder="Type a message..." value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()} />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+      ) : (
+        <div className="form-card" style={{ background: "#fdf0f8", border: "1px solid #f3d4ff", padding: "12px 16px" }}>
+          <p style={{ color: "#b08fd4", fontSize: "13px" }}>👁️ Super Admin view only — you can read messages but cannot send.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -554,7 +623,8 @@ function AdminPage({ user }) {
 
   return (
     <div className="page">
-      <h1 className="page-title">⚙️ Admin Panel</h1>
+      <h1 className="page-title">⚙️ Super Admin Panel</h1>
+      <p style={{ color: "#b08fd4", fontSize: "13px", marginTop: "-16px" }}>Full website control — manage all users and projects</p>
       {msg && <p className="success-message">{msg}</p>}
       <div className="admin-tabs">
         <button className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}>👥 All Users ({users.length})</button>
@@ -570,7 +640,7 @@ function AdminPage({ user }) {
                   <td>{u.id}</td>
                   <td>{u.name || "—"}</td>
                   <td>{u.email}</td>
-                  <td>{u.isAdmin ? <span className="admin-badge">Superadmin</span> : "User"}</td>
+                  <td>{u.isAdmin ? <span className="admin-badge">Super Admin</span> : "User"}</td>
                   <td>{u.id !== user.userId && <button className="delete-btn" onClick={() => deleteUser(u.id)}>Delete</button>}</td>
                 </tr>
               ))}
@@ -581,7 +651,7 @@ function AdminPage({ user }) {
       {activeTab === "projects" && (
         <div className="admin-table-wrapper">
           <table className="admin-table">
-            <thead><tr><th>ID</th><th>Name</th><th>Admin</th><th>Members</th><th>Tasks</th><th>Progress</th><th>Deadline</th></tr></thead>
+            <thead><tr><th>ID</th><th>Name</th><th>Project Admin</th><th>Members</th><th>Tasks</th><th>Progress</th><th>Deadline</th></tr></thead>
             <tbody>
               {allProjects.map(p => (
                 <tr key={p.id}>
@@ -603,6 +673,117 @@ function AdminPage({ user }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfilePage({ user, projects }) {
+  const [name, setName] = useState(user.name || "");
+  const [bio, setBio] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [profileMsg, setProfileMsg] = useState("");
+  const [passMsg, setPassMsg] = useState("");
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const res = await fetch(`${API}/auth/profile/${user.userId}`);
+        const data = await res.json();
+        setName(data.name || "");
+        setBio(data.bio || "");
+      } catch {}
+    }
+    loadProfile();
+  }, []);
+
+  async function saveProfile() {
+    const res = await fetch(`${API}/auth/updateprofile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.userId, name, bio }),
+    });
+    const data = await res.json();
+    setProfileMsg(data.message);
+    setTimeout(() => setProfileMsg(""), 3000);
+  }
+
+ async function changePassword() {
+    if (newPassword !== confirmPassword) { setPassMsg("New passwords do not match"); return; }
+    if (newPassword.length < 4) { setPassMsg("Password must be at least 4 characters"); return; }
+    try {
+      const res = await fetch(`${API}/auth/changepassword`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.userId, oldPassword, newPassword, confirmPassword }),
+      });
+      const data = await res.json();
+      setPassMsg(data.message);
+      if (res.ok) { setOldPassword(""); setNewPassword(""); setConfirmPassword(""); }
+    } catch {
+      setPassMsg("Server error — please try again");
+    }
+  }
+
+  const userInitial = ((name || user.email) || "U")[0].toUpperCase();
+  const avgProgress = projects.length > 0 ? Math.round(projects.reduce((a, p) => a + p.progress, 0) / projects.length) : 0;
+
+  return (
+    <div className="page profile-page">
+      <h1 className="page-title">My Profile</h1>
+
+      <div className="profile-header-card">
+        <div className="profile-avatar-large">{userInitial}</div>
+        <div className="profile-header-info">
+          <h2>{name || "No name set"}</h2>
+          <p>{user.email}</p>
+          {bio && <p style={{ marginTop: "6px", fontStyle: "italic", color: "rgba(255,255,255,0.85)" }}>{bio}</p>}
+          <span className="profile-role">{user.isAdmin ? "⚙️ Super Admin" : "👤 User"}</span>
+        </div>
+      </div>
+
+      <div className="profile-stats">
+        <div className="profile-stat"><p className="stat-number">{projects.length}</p><p className="stat-label">Total Projects</p></div>
+        <div className="profile-stat"><p className="stat-number">{projects.filter(p => p.isAdmin).length}</p><p className="stat-label">Projects as Admin</p></div>
+        <div className="profile-stat"><p className="stat-number">{avgProgress}%</p><p className="stat-label">Avg Progress</p></div>
+      </div>
+
+      <div className="profile-form-card">
+        <h2>✏️ Edit Profile</h2>
+        <div className="profile-field">
+          <label>Full Name</label>
+          <input type="text" placeholder="Your full name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="profile-field">
+          <label>Email</label>
+          <input type="email" value={user.email} disabled style={{ opacity: 0.6, cursor: "not-allowed" }} />
+        </div>
+        <div className="profile-field">
+          <label>Bio</label>
+          <textarea placeholder="Tell your team a bit about yourself..." value={bio} onChange={(e) => setBio(e.target.value)} />
+        </div>
+        {profileMsg && <p className="success-message">{profileMsg}</p>}
+        <button className="profile-save-btn" onClick={saveProfile}>Save Changes</button>
+      </div>
+
+      <div className="profile-form-card password-section">
+        <h2>🔒 Change Password</h2>
+        <div className="profile-field">
+          <label>Current Password</label>
+          <input type="password" placeholder="Enter current password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} />
+        </div>
+        <div className="profile-field">
+          <label>New Password</label>
+          <input type="password" placeholder="Enter new password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        </div>
+        <div className="profile-field">
+          <label>Confirm New Password</label>
+          <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+        </div>
+        {passMsg && <p className="success-message">{passMsg}</p>}
+        <button className="profile-save-btn" onClick={changePassword}>Change Password</button>
+      </div>
     </div>
   );
 }

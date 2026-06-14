@@ -68,6 +68,15 @@ namespace backend.Controllers
                 memberCmd.Parameters.AddWithValue("@UserId", request.AdminId);
                 memberCmd.ExecuteNonQuery();
 
+                // Auto-add Super Admin (ID=1) to every project if not already the creator
+                if (request.AdminId != 1)
+                {
+                    string superAdminQuery = "INSERT INTO project_members (ProjectId, UserId) VALUES (@ProjectId, 1)";
+                    var superAdminCmd = new MySqlCommand(superAdminQuery, connection);
+                    superAdminCmd.Parameters.AddWithValue("@ProjectId", projectId);
+                    superAdminCmd.ExecuteNonQuery();
+                }
+
                 return Ok(new { message = "Project created", projectId });
             }
         }
@@ -80,7 +89,6 @@ namespace backend.Controllers
             {
                 connection.Open();
 
-                // Check requester is admin
                 string adminCheck = "SELECT AdminId, Name FROM projects WHERE Id=@ProjectId";
                 var adminCmd = new MySqlCommand(adminCheck, connection);
                 adminCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
@@ -91,9 +99,8 @@ namespace backend.Controllers
                 adminReader.Close();
 
                 if (adminId != request.RequesterId)
-                    return Unauthorized(new { message = "Only the admin can add members" });
+                    return Unauthorized(new { message = "Only the Project Admin can add members" });
 
-                // Find user by email
                 string findUser = "SELECT Id, Name FROM users WHERE Email=@Email";
                 var findCmd = new MySqlCommand(findUser, connection);
                 findCmd.Parameters.AddWithValue("@Email", request.MemberEmail);
@@ -105,7 +112,6 @@ namespace backend.Controllers
                 string memberName = reader.IsDBNull(reader.GetOrdinal("Name")) ? request.MemberEmail : reader.GetString("Name");
                 reader.Close();
 
-                // Check not already a member
                 string dupCheck = "SELECT COUNT(*) FROM project_members WHERE ProjectId=@ProjectId AND UserId=@UserId";
                 var dupCmd = new MySqlCommand(dupCheck, connection);
                 dupCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
@@ -114,14 +120,12 @@ namespace backend.Controllers
                 if (dup > 0)
                     return BadRequest(new { message = "User is already a member" });
 
-                // Add to project
                 string insertMember = "INSERT INTO project_members (ProjectId, UserId) VALUES (@ProjectId, @UserId)";
                 var insertCmd = new MySqlCommand(insertMember, connection);
                 insertCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
                 insertCmd.Parameters.AddWithValue("@UserId", memberId);
                 insertCmd.ExecuteNonQuery();
 
-                // 🔔 Send notification to the new member
                 string notifQuery = "INSERT INTO notifications (UserId, Message) VALUES (@UserId, @Message)";
                 var notifCmd = new MySqlCommand(notifQuery, connection);
                 notifCmd.Parameters.AddWithValue("@UserId", memberId);
@@ -129,6 +133,38 @@ namespace backend.Controllers
                 notifCmd.ExecuteNonQuery();
 
                 return Ok(new { message = $"{memberName} added to project", memberName, memberId });
+            }
+        }
+
+        // ── REMOVE member from project (Project Admin only) ──
+        [HttpDelete("{projectId}/removemember/{memberId}/{requesterId}")]
+        public IActionResult RemoveMember(int projectId, int memberId, int requesterId)
+        {
+            using (var connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+
+                string adminCheck = "SELECT AdminId FROM projects WHERE Id=@ProjectId";
+                var adminCmd = new MySqlCommand(adminCheck, connection);
+                adminCmd.Parameters.AddWithValue("@ProjectId", projectId);
+                var adminId = adminCmd.ExecuteScalar();
+                if (adminId == null || (int)(long)adminId != requesterId)
+                    return Unauthorized(new { message = "Only the Project Admin can remove members" });
+
+                if (memberId == requesterId)
+                    return BadRequest(new { message = "You cannot remove yourself as admin" });
+
+                // Prevent removing Super Admin
+                if (memberId == 1)
+                    return BadRequest(new { message = "The Super Admin cannot be removed from a project" });
+
+                string query = "DELETE FROM project_members WHERE ProjectId=@ProjectId AND UserId=@UserId";
+                var cmd = new MySqlCommand(query, connection);
+                cmd.Parameters.AddWithValue("@ProjectId", projectId);
+                cmd.Parameters.AddWithValue("@UserId", memberId);
+                cmd.ExecuteNonQuery();
+
+                return Ok(new { message = "Member removed from project" });
             }
         }
 
@@ -189,7 +225,7 @@ namespace backend.Controllers
             return Ok(tasks);
         }
 
-        // ── CREATE task (admin only) ──
+        // ── CREATE task (Project Admin only) ──
         [HttpPost("addtask")]
         public IActionResult AddTask([FromBody] AddTaskRequest request)
         {
@@ -197,7 +233,6 @@ namespace backend.Controllers
             {
                 connection.Open();
 
-                // Check requester is admin
                 string adminCheck = "SELECT AdminId, Name FROM projects WHERE Id=@ProjectId";
                 var adminCmd = new MySqlCommand(adminCheck, connection);
                 adminCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
@@ -208,7 +243,7 @@ namespace backend.Controllers
                 adminReader.Close();
 
                 if (adminId != request.RequesterId)
-                    return Unauthorized(new { message = "Only the admin can assign tasks" });
+                    return Unauthorized(new { message = "Only the Project Admin can assign tasks" });
 
                 string query = "INSERT INTO tasks (ProjectId, Title, AssignedTo, Status, Priority) VALUES (@ProjectId, @Title, @AssignedTo, 'todo', @Priority)";
                 var cmd = new MySqlCommand(query, connection);
@@ -218,7 +253,6 @@ namespace backend.Controllers
                 cmd.Parameters.AddWithValue("@Priority", request.Priority ?? "Medium");
                 cmd.ExecuteNonQuery();
 
-                // 🔔 Notify the assigned user
                 string notifQuery = "INSERT INTO notifications (UserId, Message) VALUES (@UserId, @Message)";
                 var notifCmd = new MySqlCommand(notifQuery, connection);
                 notifCmd.Parameters.AddWithValue("@UserId", request.AssignedToId);
@@ -236,22 +270,83 @@ namespace backend.Controllers
             using (var connection = new MySqlConnection(connectionString))
             {
                 connection.Open();
+
                 string query = "UPDATE tasks SET Status=@Status WHERE Id=@TaskId";
                 var cmd = new MySqlCommand(query, connection);
                 cmd.Parameters.AddWithValue("@Status", request.Status);
                 cmd.Parameters.AddWithValue("@TaskId", request.TaskId);
                 cmd.ExecuteNonQuery();
 
-                // Update project progress automatically
-                string progressQuery = @"UPDATE projects SET Progress = (
-                    SELECT ROUND(COUNT(CASE WHEN Status='completed' THEN 1 END) * 100.0 / COUNT(*))
-                    FROM tasks WHERE ProjectId=@ProjectId
-                ) WHERE Id=@ProjectId";
-                var progressCmd = new MySqlCommand(progressQuery, connection);
-                progressCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
-                progressCmd.ExecuteNonQuery();
+                string countQuery = "SELECT COUNT(*) FROM tasks WHERE ProjectId=@ProjectId";
+                var countCmd = new MySqlCommand(countQuery, connection);
+                countCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
+                int total = Convert.ToInt32(countCmd.ExecuteScalar());
 
-                return Ok(new { message = "Task updated" });
+                string completedQuery = "SELECT COUNT(*) FROM tasks WHERE ProjectId=@ProjectId AND Status='completed'";
+                var completedCmd = new MySqlCommand(completedQuery, connection);
+                completedCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
+                int completed = Convert.ToInt32(completedCmd.ExecuteScalar());
+
+                int progress = total > 0 ? (int)Math.Round(completed * 100.0 / total) : 0;
+
+                string updateProgress = "UPDATE projects SET Progress=@Progress WHERE Id=@ProjectId";
+                var updateCmd = new MySqlCommand(updateProgress, connection);
+                updateCmd.Parameters.AddWithValue("@Progress", progress);
+                updateCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
+                updateCmd.ExecuteNonQuery();
+
+                return Ok(new { message = "Task updated", progress });
+            }
+        }
+
+        // ── UPDATE task details (Project Admin only) ──
+        [HttpPost("updatetaskdetails")]
+        public IActionResult UpdateTaskDetails([FromBody] UpdateTaskDetailsRequest request)
+        {
+            using (var connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+
+                string adminCheck = "SELECT AdminId FROM projects WHERE Id=@ProjectId";
+                var adminCmd = new MySqlCommand(adminCheck, connection);
+                adminCmd.Parameters.AddWithValue("@ProjectId", request.ProjectId);
+                var adminId = adminCmd.ExecuteScalar();
+                if (adminId == null || (int)(long)adminId != request.RequesterId)
+                    return Unauthorized(new { message = "Only the Project Admin can modify tasks" });
+
+                string query = "UPDATE tasks SET Title=@Title, AssignedTo=@AssignedTo, Priority=@Priority WHERE Id=@TaskId";
+                var cmd = new MySqlCommand(query, connection);
+                cmd.Parameters.AddWithValue("@Title", request.Title);
+                cmd.Parameters.AddWithValue("@AssignedTo", request.AssignedToId);
+                cmd.Parameters.AddWithValue("@Priority", request.Priority);
+                cmd.Parameters.AddWithValue("@TaskId", request.TaskId);
+                cmd.ExecuteNonQuery();
+
+                return Ok(new { message = "Task updated successfully" });
+            }
+        }
+
+        // ── DELETE task (Project Admin only) ──
+        [HttpDelete("deletetask/{taskId}/{projectId}/{requesterId}")]
+        public IActionResult DeleteTask(int taskId, int projectId, int requesterId)
+        {
+            using (var connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+
+                string adminCheck = "SELECT AdminId FROM projects WHERE Id=@ProjectId";
+                var adminCmd = new MySqlCommand(adminCheck, connection);
+                adminCmd.Parameters.AddWithValue("@ProjectId", projectId);
+                var adminId = adminCmd.ExecuteScalar();
+                if (adminId == null || (int)(long)adminId != requesterId)
+                    return Unauthorized(new { message = "Only the Project Admin can delete tasks" });
+
+                string query = "DELETE FROM tasks WHERE Id=@TaskId";
+                var cmd = new MySqlCommand(query, connection);
+                cmd.Parameters.AddWithValue("@TaskId", taskId);
+                cmd.ExecuteNonQuery();
+
+                return Ok(new { message = "Task deleted" });
             }
         }
 
@@ -345,15 +440,13 @@ namespace backend.Controllers
             return Ok(new { message = "Marked as read" });
         }
 
-        // ── ADMIN: get all users ──
+        // ── SUPER ADMIN: get all users ──
         [HttpGet("admin/users/{requesterId}")]
         public IActionResult GetAllUsers(int requesterId)
         {
             using (var connection = new MySqlConnection(connectionString))
             {
                 connection.Open();
-
-                // Verify requester is superadmin
                 string checkAdmin = "SELECT IsAdmin FROM users WHERE Id=@Id";
                 var checkCmd = new MySqlCommand(checkAdmin, connection);
                 checkCmd.Parameters.AddWithValue("@Id", requesterId);
@@ -379,14 +472,13 @@ namespace backend.Controllers
             }
         }
 
-        // ── ADMIN: get all projects ──
+        // ── SUPER ADMIN: get all projects ──
         [HttpGet("admin/projects/{requesterId}")]
         public IActionResult GetAllProjects(int requesterId)
         {
             using (var connection = new MySqlConnection(connectionString))
             {
                 connection.Open();
-
                 string checkAdmin = "SELECT IsAdmin FROM users WHERE Id=@Id";
                 var checkCmd = new MySqlCommand(checkAdmin, connection);
                 checkCmd.Parameters.AddWithValue("@Id", requesterId);
@@ -418,7 +510,7 @@ namespace backend.Controllers
             }
         }
 
-        // ── ADMIN: delete user ──
+        // ── SUPER ADMIN: delete user ──
         [HttpDelete("admin/users/{requesterId}/{targetUserId}")]
         public IActionResult DeleteUser(int requesterId, int targetUserId)
         {
@@ -441,9 +533,11 @@ namespace backend.Controllers
         }
     }
 
+    // ── REQUEST CLASSES ──
     public class CreateProjectRequest { public string Name { get; set; } public string Description { get; set; } public string Deadline { get; set; } public int AdminId { get; set; } }
     public class AddMemberRequest { public int ProjectId { get; set; } public int RequesterId { get; set; } public string MemberEmail { get; set; } }
     public class AddTaskRequest { public int ProjectId { get; set; } public int RequesterId { get; set; } public string Title { get; set; } public int AssignedToId { get; set; } public string Priority { get; set; } }
     public class UpdateTaskRequest { public int TaskId { get; set; } public int ProjectId { get; set; } public string Status { get; set; } }
+    public class UpdateTaskDetailsRequest { public int TaskId { get; set; } public int ProjectId { get; set; } public int RequesterId { get; set; } public string Title { get; set; } public int AssignedToId { get; set; } public string Priority { get; set; } }
     public class SendMessageRequest { public int ProjectId { get; set; } public int UserId { get; set; } public string Text { get; set; } }
 }
