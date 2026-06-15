@@ -221,6 +221,7 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
   const [newDeadline, setNewDeadline] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [msg, setMsg] = useState("");
+  const [editingProject, setEditingProject] = useState(null);
 
   async function createProject() {
     if (!newName.trim()) return;
@@ -237,9 +238,41 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
     } catch { setMsg("Error creating project"); }
   }
 
+  async function deleteProject(projectId) {
+    if (!window.confirm("Delete this project and all its data? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`${API}/project/delete/${projectId}/${user.userId}`, { method: "DELETE" });
+      const data = await res.json();
+      setMsg(data.message);
+      onProjectCreated();
+    } catch { setMsg("Error deleting project"); }
+  }
+
+  async function saveEditProject() {
+    if (!editingProject.name.trim()) return;
+    try {
+      const res = await fetch(`${API}/project/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: editingProject.id,
+          requesterId: user.userId,
+          name: editingProject.name,
+          description: editingProject.description || "",
+          deadline: editingProject.deadline || ""
+        }),
+      });
+      const data = await res.json();
+      setMsg(data.message);
+      setEditingProject(null);
+      onProjectCreated();
+    } catch { setMsg("Error updating project"); }
+  }
+
   return (
     <div className="page">
       <h1 className="page-title">Projects</h1>
+
       {!user.isAdmin ? (
         <div className="form-card">
           <h2>Create New Project</h2>
@@ -256,13 +289,47 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
           <p style={{ color: "#b08fd4", fontSize: "14px" }}>👁️ You are viewing as Super Admin — you can monitor all projects but cannot create new ones.</p>
         </div>
       )}
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Edit Project</h2>
+            <div className="form-row" style={{ flexDirection: "column" }}>
+              <input
+                type="text"
+                placeholder="Project name"
+                value={editingProject.name}
+                onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Deadline (e.g. 30 June 2026)"
+                value={editingProject.deadline || ""}
+                onChange={(e) => setEditingProject({ ...editingProject, deadline: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Description (optional)"
+                value={editingProject.description || ""}
+                onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
+              />
+            </div>
+            <div className="modal-btns">
+              <button onClick={saveEditProject}>Save</button>
+              <button className="cancel-btn" onClick={() => setEditingProject(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {projects.length === 0 ? (
         <div className="empty-state"><p>No projects yet — create one above!</p></div>
       ) : (
         <div className="project-list">
           {projects.map((project) => (
-            <div key={project.id} className="project-card" onClick={() => onSelectProject(project)} style={{ cursor: "pointer" }}>
-              <div className="project-card-header">
+            <div key={project.id} className="project-card">
+              <div className="project-card-header" onClick={() => onSelectProject(project)} style={{ cursor: "pointer" }}>
                 <h3>{project.name}</h3>
                 {project.isAdmin ? <span className="admin-badge">Project Admin</span> : <span className="status-badge member">Member</span>}
               </div>
@@ -270,6 +337,12 @@ function ProjectsPage({ projects, user, onProjectCreated, onSelectProject }) {
               <p className="project-deadline">📅 {project.deadline || "No deadline"}</p>
               <div className="progress-bar"><div className="progress-fill" style={{ width: `${project.progress}%` }}></div></div>
               <p className="progress-label">{project.progress}% complete</p>
+              {project.isAdmin && !user.isAdmin && (
+                <div className="task-admin-btns">
+                  <button className="edit-btn" onClick={() => setEditingProject({ ...project })}>✏️ Edit</button>
+                  <button className="delete-btn" onClick={() => deleteProject(project.id)}>🗑️ Delete</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
